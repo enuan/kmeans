@@ -204,7 +204,7 @@ func TestHammingDistance(t *testing.T) {
 	secondVector := []float64{1., 2.5, 3., 3., 4.}
 	thirdVector := []float64{1., 2., 3., 4., 5., 6.}
 	fourthVector := []float64{1., 1., 1., 1., 1., 1.}
-	const firstActual, secondActual = 2, 5
+	firstActual, secondActual := 2., 5.
 	firstComputed, _ := HammingDistance(firstVector, secondVector)
 	secondComputed, _ := HammingDistance(thirdVector, fourthVector)
 
