@@ -80,24 +80,85 @@ func near(p ClusteredObservation, mean []Observation, distanceFunction DistanceF
 	return indexOfCluster, math.Sqrt(minSquaredDistance)
 }
 
-// Instead of initializing randomly the seeds, make a sound decision of initializing
+type squaredDistances struct {
+	distances []float64
+	sum       float64
+	data      []ClusteredObservation
+	distanceF DistanceFunction
+}
+
+func newSquaredDistances(data []ClusteredObservation, distanceF DistanceFunction) *squaredDistances {
+	sd := new(squaredDistances)
+	sd.data = data
+	sd.distanceF = distanceF
+	sd.sum = math.Inf(+1)
+	sd.distances = make([]float64, len(data))
+	for i := range sd.distances {
+		sd.distances[i] = math.Inf(+1)
+	}
+	return sd
+}
+
+func (sd *squaredDistances) update(newSeed Observation) {
+	sum := 0.
+	for i, p := range sd.data {
+		newDistance, _ := sd.distanceF(p.Observation, newSeed)
+		newSquaredDistance := newDistance * newDistance
+		distance := sd.distances[i]
+		if distance > newSquaredDistance {
+			sd.distances[i] = newSquaredDistance
+			sum += newSquaredDistance
+		} else {
+			sum += distance
+		}
+	}
+	sd.sum = sum
+}
+
+func (orig *squaredDistances) copy() *squaredDistances {
+	sd := new(squaredDistances)
+	sd.data = orig.data
+	sd.distanceF = orig.distanceF
+	sd.sum = orig.sum
+	sd.distances = make([]float64, len(orig.data))
+	copy(sd.distances, orig.distances)
+	return sd
+}
+
+func (sd *squaredDistances) sample() Observation {
+	target := rand.Float64() * sd.sum
+	distances := sd.distances
+	j := 0
+	for sum := distances[0]; sum <= target; sum += distances[j] {
+		j++
+	}
+	return sd.data[j].Observation
+}
+
+// kmeans++
 func seed(data []ClusteredObservation, k int, distanceFunction DistanceFunction) []Observation {
 	s := make([]Observation, k)
+	sd := newSquaredDistances(data, distanceFunction)
+
 	s[0] = data[rand.Intn(len(data))].Observation
-	d2 := make([]float64, len(data))
-	for ii := 1; ii < k; ii++ {
-		var sum float64
-		for jj, p := range data {
-			_, dMin := near(p, s[:ii], distanceFunction)
-			d2[jj] = dMin * dMin
-			sum += d2[jj]
+	sd.update(s[0])
+
+	nCandidates := 2 + int(math.Log(float64(k)))
+
+	for i := 1; i < k; i++ {
+		bestSum := sd.sum
+		var bestCandidate Observation
+		for j := 0; j < nCandidates; j++ {
+			candidate := sd.sample()
+			candidateSd := sd.copy()
+			candidateSd.update(candidate)
+			if candidateSd.sum < bestSum {
+				bestCandidate = candidate
+				bestSum = candidateSd.sum
+			}
 		}
-		target := rand.Float64() * sum
-		jj := 0
-		for sum = d2[0]; sum < target; sum += d2[jj] {
-			jj++
-		}
-		s[ii] = data[jj].Observation
+		s[i] = bestCandidate
+		sd.update(bestCandidate)
 	}
 	return s
 }
